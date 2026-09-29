@@ -1,0 +1,41 @@
+[project]
+name = "ecoscope-vercel"
+version = "3.0.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "requests==2.34.2",
+    "numpy==2.3.5",
+    "pandas==2.2.3",
+    "rasterio==1.5.1",
+    "shapely==2.1.2",
+    "pyproj==3.8.0",
+    "matplotlib==3.10.8",
+    "Pillow==12.3.0",
+    "reportlab==4.4.9",
+    "openpyxl==3.1.5",
+    "crewai==1.15.22",
+    "pydantic==2.12.5",
+    "fastapi==0.141.1",
+    "uvicorn==0.54.0",
+    "python-dotenv==1.2.3",
+]
+
+# Vercel bundle-size fix (917 MB -> ~400 MB, limit 500 MB).
+# crewai declares vector-database / ML / gRPC / Kubernetes dependencies that this app never
+# imports (it uses crewai only for Agent/Task/Crew/tools with its own Groq LLM adapter).
+# These overrides skip installing them; no application code is changed. All tests pass.
+[tool.uv]
+override-dependencies = [
+    "lancedb; sys_platform == 'never'",
+    "onnxruntime; sys_platform == 'never'",
+    "kubernetes; sys_platform == 'never'",
+    "grpcio; sys_platform == 'never'",
+    "opentelemetry-exporter-otlp-proto-grpc; sys_platform == 'never'",
+    "uvloop; sys_platform == 'never'",
+    "watchfiles; sys_platform == 'never'",
+    "httptools; sys_platform == 'never'",
+    "hf-xet; sys_platform == 'never'",
+    "pdfplumber; sys_platform == 'never'",
+    "tokenizers; sys_platform == 'never'",
+    "huggingface-hub; sys_platform == 'never'",
+]

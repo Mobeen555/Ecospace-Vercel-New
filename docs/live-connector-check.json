@@ -1,0 +1,55 @@
+[
+  {
+    "module": "Climate",
+    "status": "retrieved",
+    "tables": {
+      "Historical daily": 31,
+      "Monthly climate": 1,
+      "Weather forecast": 7
+    },
+    "sources": [
+      {
+        "evidence_id": "C1",
+        "provider": "Open-Meteo / ERA5",
+        "retrieved_utc": "2026-09-29T08:53:26+00:00",
+        "period": "2026-08-01 to 2026-08-31"
+      },
+      {
+        "evidence_id": "C3",
+        "provider": "Open-Meteo / best-match weather models",
+        "retrieved_utc": "2026-09-29T08:53:37+00:00",
+        "period": "2026-09-29 to 2026-10-05"
+      }
+    ]
+  },
+  {
+    "module": "Air quality",
+    "status": "retrieved",
+    "tables": {
+      "Air quality hourly": 120
+    },
+    "sources": [
+      {
+        "evidence_id": "A1",
+        "provider": "Open-Meteo / CAMS",
+        "retrieved_utc": "2026-09-29T08:53:26+00:00",
+        "period": "2026-09-29 00:00:00 to 2026-10-03 23:00:00"
+      }
+    ]
+  },
+  {
+    "module": "Earthquakes",
+    "status": "retrieved",
+    "tables": {
+      "Earthquake events": 1
+    },
+    "sources": [
+      {
+        "evidence_id": "E1",
+        "provider": "USGS earthquake catalogue",
+        "retrieved_utc": "2026-09-29T08:53:25+00:00",
+        "period": "2026-08-01 to 2026-08-31"
+      }
+    ]
+  }
+]
