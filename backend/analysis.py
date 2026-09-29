@@ -28,7 +28,7 @@ def next_analysis_step(run):
             run["results"][module] = adapters[module]()
         run["events"].append({"module":module,"status":"complete","at":env.utc_now()})
     except Exception as exc:
-        run["errors"][module] = str(exc)[:650] if isinstance(exc,env.DataError) else f"{module} could not complete ({type(exc).__name__}). The source remains unavailable."
+        run["errors"][module] = str(exc)[:650] if isinstance(exc,env.DataError) else f"{module} could not complete ({type(exc).__name__}{': '+str(exc)[:300] if isinstance(exc,ImportError) else ''}). The source remains unavailable."
         run["events"].append({"module":module,"status":"unavailable","at":env.utc_now()})
         run.pop("_satellite",None)
     queue.pop(0)
