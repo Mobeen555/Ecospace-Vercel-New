@@ -145,3 +145,13 @@ Open libraries and public endpoints have separate usage conditions. The code lic
 - GBIF record licences and dataset attribution remain in returned tables: https://www.gbif.org/terms
 
 Do not advertise unlimited free use, guaranteed accuracy or official emergency predictions. Review provider licensing and replace endpoints/hosting arrangements as needed before commercial or high-volume deployment.
+
+## Troubleshooting the AI studio (v3.1 fixes)
+
+| What you see | Cause | Fix |
+|---|---|---|
+| "The API did not return a readable response" only when a review step runs | `import crewai` writes to `~/.local/share/crewai`, which is read-only on Vercel | Fixed in `backend/crew_config.py` (`ensure_writable_home`) — HOME is redirected to `/tmp` |
+| Same message, with a specific hint about *timeout*, *crash* or *Deployment Protection* | Vercel answered with its own error page | Follow the hint; open **Vercel → Deployment → Logs** and read the traceback for `/api/index` |
+| "This study is busy or has changed…" | A step was killed by Vercel (timeout/crash) and its lock is held for up to six minutes | Wait, press **Refresh**, then **Resume saved review** |
+| "Review paused: the model kept attempting a native tool call…" | gpt-oss answered with a native tool call (Groq `400 tool_use_failed`) twice in a row | Resume the stage; the adapter normally recovers the call automatically |
+| "Groq's token-per-minute window is full…" / "rate or token limit" | Your Groq tier's TPM is lower than one agent stage needs | Wait a minute and resume, or set `GROQ_TOKENS_PER_MINUTE` to your real limit from the Groq console |

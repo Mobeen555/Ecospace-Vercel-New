@@ -12,15 +12,30 @@ export const AGENTS = [
   ['ecology_field', 'Ecology & field', 'Species & observations'],
   ['reviewer_reporter', 'Evidence reviewer', 'Synthesis & reporting'],
 ];
+// Vercel (or the runtime) answered with something that is not the app's JSON. Say what that usually means.
+function nonJsonError(status, raw) {
+  const text = (raw || '').slice(0, 600);
+  let message;
+  if (status === 504 || /FUNCTION_INVOCATION_TIMEOUT|timed? ?out/i.test(text)) message = 'The server step ran past its time limit before replying. The study stays locked for up to six minutes: wait, press Refresh, then resume the saved review. Raise the Vercel function duration if this repeats.';
+  else if (status === 413) message = 'The request was too large for Vercel. Use a smaller upload or study.';
+  else if (/FUNCTION_INVOCATION_FAILED|Internal Server Error/i.test(text) || status >= 500) message = `The Vercel function crashed or failed to start (HTTP ${status}). Open Vercel → Deployment → Logs and look at the traceback for /api/index.`;
+  else if (status === 401 || status === 403 || /<html/i.test(text) && /vercel|authentication|sign in|log in/i.test(text)) message = 'Vercel Deployment Protection (or a login page) is answering instead of the API. Use your production domain or turn off protection for this deployment.';
+  else if (status === 404) message = 'The /api route was not found. Check that vercel.json, api/index.py and the rewrite were deployed from the project root.';
+  else message = `The API did not return a readable response (HTTP ${status}). Check the Vercel deployment logs and environment settings.`;
+  const error = new Error(message);
+  error.status = status;
+  return error;
+}
 export async function api(path, body) {
   const response = await fetch('/api' + path, {
     method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin',
     headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+  const raw = await response.text().catch(() => '');
   let data;
-  try { data = await response.json(); }
-  catch { throw new Error('The API did not return a readable response. Check the Vercel deployment and environment settings.'); }
+  try { data = JSON.parse(raw); }
+  catch { throw nonJsonError(response.status, raw); }
   if (!response.ok) {
     const detail = typeof data.detail === 'string' ? data.detail : data.detail?.map(x => `${x.loc?.slice(1).join('.')}: ${x.msg}`).join('; ');
     const error = new Error(detail || `Request stopped (${response.status}).`);

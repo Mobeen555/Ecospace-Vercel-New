@@ -211,3 +211,83 @@ def test_html_and_zip_include_only_completed_current_ai_review(run):
         assert "maps/study_and_observations.geojson" in z.namelist()
 
 
+
+
+# ---- Regression tests for the AI Studio failures on Vercel -------------------------------------
+
+def groq_error_response(status, body, headers=None):
+    return SimpleNamespace(status_code=status, headers=headers or {}, json=lambda: body)
+
+
+TOOL_FAILED = lambda generation: {"error": {"message": "Failed to call a function.", "type": "invalid_request_error",
+                                           "code": "tool_use_failed", "failed_generation": generation}}
+
+
+@pytest.mark.parametrize("generation,expected_tool,expected_args", [
+    ('{"name": "read_evidence", "arguments": {"module": "Climate"}}', "read_evidence", {"module": "Climate"}),
+    ('<function=quality_checks>{}</function>', "quality_checks", {}),
+    ('<|channel|>commentary to=functions.table_statistics <|constrain|>json<|message|>{"module":"Climate","table":"Historical daily","column":"precipitation_sum","operation":"sum"}',
+     "table_statistics", {"module": "Climate", "table": "Historical daily", "column": "precipitation_sum", "operation": "sum"}),
+])
+def test_tool_use_failed_is_recovered_as_react_action(generation, expected_tool, expected_args):
+    text = runtime.recover_tool_call(generation)
+    assert text and f"Action: {expected_tool}\n" in text
+    assert json.loads(text.split("Action Input: ", 1)[1]) == expected_args
+
+
+def test_tool_use_failed_rejects_unknown_tools_and_prose():
+    assert runtime.recover_tool_call('{"name": "brave_search", "arguments": {"q": "x"}}') is None
+    assert runtime.recover_tool_call("Is there anything else you need?") is None
+    assert runtime.recover_tool_call(None) is None
+
+
+def test_stage_completes_when_groq_returns_tool_use_failed_then_answers(run, monkeypatch, no_rate_wait):
+    """The exact failure seen in AI Studio: Groq 400 tool_use_failed on the first call of a stage."""
+    replies = iter([
+        groq_error_response(400, TOOL_FAILED('{"name":"quality_checks","arguments":{}}')),
+        mock_response("Final Answer: Review this local study only. [C1]"),
+    ])
+    monkeypatch.setattr(runtime.requests, "post", lambda *a, **k: next(replies))
+    output = begin_review(run)
+    review_step(run, "qa-key")
+    assert output["status"] == "running", output["error"]
+    assert len(output["agent_outputs"]) == 1 and "[C1]" in output["agent_outputs"][0]["text"]
+    assert {e.get("tool") for e in output["activity"] if e["event"] == "tool"} == {"quality_checks"}
+
+
+def test_tool_use_failed_without_a_call_retries_once_with_format_reminder(run, monkeypatch, no_rate_wait):
+    sent = []
+    replies = iter([groq_error_response(400, TOOL_FAILED("I will look at the data.")),
+                    mock_response("Final Answer: Local scope only. [C1]")])
+    def post(*a, **k):
+        sent.append(k["json"]["messages"])
+        return next(replies)
+    monkeypatch.setattr(runtime.requests, "post", post)
+    output = begin_review(run)
+    review_step(run, "qa-key")
+    assert output["status"] == "running" and len(sent) == 2
+    assert "Do not use native function calls" in sent[1][-1]["content"]
+
+
+def test_persistent_tool_use_failed_pauses_with_readable_message(run, monkeypatch, no_rate_wait):
+    monkeypatch.setattr(runtime.requests, "post", lambda *a, **k: groq_error_response(400, TOOL_FAILED("no call here")))
+    output = begin_review(run)
+    review_step(run, "qa-key")
+    assert output["status"] == "paused" and "native tool call" in output["error"]
+    assert "no call here" not in json.dumps(output)
+
+
+def test_setup_failure_is_saved_as_paused_not_raised(run, monkeypatch):
+    import backend.review as review_module
+    monkeypatch.setattr(review_module, "make_tools", lambda *a: (_ for _ in ()).throw(OSError("read-only file system")))
+    output = begin_review(run)
+    review_step(run, "qa-key")          # must not raise: an escaped exception becomes a non-JSON 500 on Vercel
+    assert output["status"] == "paused" and "OSError" in output["error"]
+
+
+def test_ensure_writable_home_redirects_unwritable_home(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", "/proc/definitely-not-writable")
+    monkeypatch.setattr(crew_config.tempfile, "gettempdir", lambda: str(tmp_path))
+    home = crew_config.ensure_writable_home()
+    assert home == str(tmp_path / "ecoscope-home") and Path(home).is_dir()
+    assert Path.home() == Path(home)

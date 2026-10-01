@@ -206,3 +206,21 @@ def test_all_dependencies_declared_consistently():
     requirements=[r for r in (root/'requirements.txt').read_text().splitlines() if r and not r.startswith('#')]
     assert set(project['project']['dependencies'])==set(requirements)
     assert project['project']['requires-python']=='>=3.12,<3.13'
+
+
+def test_unexpected_server_errors_are_json_not_plain_text(monkeypatch):
+    """A plain-text 500 is what produced 'The API did not return a readable response' in the browser."""
+    from fastapi.testclient import TestClient
+    from backend import api as api_module
+    def boom():
+        raise OSError(30, "Read-only file system")
+    api_module.app.add_api_route("/api/_boom", boom, methods=["GET"])
+    route = api_module.app.router.routes.pop()
+    api_module.app.router.routes.insert(0, route)   # ahead of the optional static-file mount used after `npm run build`
+    try:
+        response = TestClient(api_module.app, raise_server_exceptions=False).get("/api/_boom")
+    finally:
+        api_module.app.router.routes.remove(route)
+    assert response.status_code == 500
+    assert response.headers["content-type"].startswith("application/json")
+    assert "detail" in response.json() and "Read-only" not in response.text

@@ -1,5 +1,31 @@
 """Crew configuration. This module does not create an agent or contact a provider."""
 import os
+import tempfile
+
+
+def ensure_writable_home():
+    """Give CrewAI a writable HOME on read-only hosts such as Vercel.
+
+    Importing crewai (1.15.x) creates ~/.local/share/crewai/credentials. On Vercel only /tmp is
+    writable and XDG_DATA_HOME is ignored by that code path, so without this the import raises
+    OSError and /api/runs/{id}/review/next answers with a non-JSON 500. Must run before `import crewai`.
+    """
+    home = os.path.expanduser("~")
+    if home and home != "~" and os.path.isdir(home) and os.access(home, os.W_OK | os.X_OK):
+        return home
+    fallback = os.path.join(tempfile.gettempdir(), "ecoscope-home")
+    os.makedirs(fallback, exist_ok=True)
+    os.environ["HOME"] = fallback
+    os.environ["USERPROFILE"] = fallback
+    for name, sub in (("XDG_DATA_HOME", ".local/share"), ("XDG_CACHE_HOME", ".cache"), ("XDG_CONFIG_HOME", ".config")):
+        target = os.path.join(fallback, sub)
+        os.makedirs(target, exist_ok=True)
+        os.environ.setdefault(name, target)
+    os.environ.setdefault("CREWAI_STORAGE_DIR", os.path.join(fallback, "crewai-storage"))
+    return fallback
+
+
+ensure_writable_home()
 
 # Set these before importing CrewAI. Credentials are never put in process env vars.
 os.environ["CREWAI_DISABLE_TELEMETRY"] = "true"
@@ -7,6 +33,7 @@ os.environ["CREWAI_TRACING_ENABLED"] = "false"
 os.environ["OTEL_SDK_DISABLED"] = "true"
 
 DEFAULT_MODEL = "openai/gpt-oss-120b"
+TOOL_NAMES = ("read_evidence", "table_statistics", "quality_checks")
 MAX_LLM_CALLS = 18
 MAX_OUTPUT_TOKENS = 1800
 MAX_INPUT_CHARACTERS = 22000

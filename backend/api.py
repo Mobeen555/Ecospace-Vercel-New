@@ -2,6 +2,7 @@
 from datetime import date
 import io
 import json
+import logging
 import os
 import secrets
 import threading
@@ -24,6 +25,7 @@ from backend.presentation import present,overlay,rows
 from backend.analysis import next_analysis_step
 from backend.crew_config import AGENT_ROSTER,DEFAULT_MODEL
 
+log = logging.getLogger("ecoscope.api")
 app = FastAPI(title="EcoScope API",version="3.0.0",docs_url=None,redoc_url=None,openapi_url=None)
 RENDER_LOCK = threading.Lock()
 LOGIN_LOCK = threading.Lock()
@@ -43,6 +45,19 @@ async def request_controls(request,call_next):
         response = JSONResponse({"detail":exc.detail},status_code=exc.status_code)
     response.headers["Cache-Control"] = "no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+@app.exception_handler(Exception)
+def unexpected_handler(request,exc):
+    # Never let the browser receive Starlette's plain-text "Internal Server Error". The traceback goes to
+    # Vercel's function logs; the user sees a safe, actionable JSON message.
+    log.exception("Unhandled error on %s %s",request.method,request.url.path)
+    detail = "The server hit an unexpected error. Your saved study is unchanged; refresh it and retry. Details are in the Vercel function logs."
+    if isinstance(exc,(ImportError,OSError)):
+        detail = f"A server dependency or file-system problem stopped this step ({type(exc).__name__}). Check the Vercel function logs, then retry."
+    response = JSONResponse({"detail":detail},status_code=500)
+    response.headers["Cache-Control"] = "no-store"
     return response
 
 

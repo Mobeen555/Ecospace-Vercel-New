@@ -156,7 +156,10 @@ export default function App() {
       if (stopRef.current) notify('Paused after the completed step. You can resume this study.', 'info');
       else if (kind === 'analysis') notify(Object.keys(current.errors).length ? 'Analysis finished. Review the unavailable-source notices alongside the results.' : 'Your environmental evidence is ready.', 'success');
       else if (current.crew_review.status === 'complete') notify('All five agents completed. Your briefing is ready.', 'success');
-    } catch (e) { notify(e.message + ' Refresh the saved study before resuming.'); }
+    } catch (e) {
+      notify(e.message + ' Refresh the saved study before resuming.');
+      try { accept(await api('/runs/' + current.id)); } catch {} // re-sync with what the server actually saved
+    }
     finally { setBusy(''); busyRef.current = false; setProgress(''); refreshList(); }
   }
   async function create(form) { if (busyRef.current) return; setCreating(true); try { const data = await api('/runs', form); accept(data); setStudyOpen(false); navigate('atlas'); setCreating(false); refreshList(); await loop(data, 'analysis'); } catch (e) { notify(e.message); } finally { setCreating(false); } }
